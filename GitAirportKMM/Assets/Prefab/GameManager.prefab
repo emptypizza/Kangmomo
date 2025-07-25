@@ -44,7 +44,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8da748c91407b4b3999c4a381365f61b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  player: {fileID: 0}
   gridCellPrefab: {fileID: 935555693366181932, guid: 06778738bb067461db13894bcce774b6, type: 3}
-  gridWidth: 9
-  gridHeight: 9
+  gridWidth: 6
+  gridHeight: 7
+  gridParent: {fileID: 0}
   itemPrefab: {fileID: 8515589003397725105, guid: 6f07e12afaa7a44669dba243eee88849, type: 3}
