@@ -6,6 +6,7 @@ TagManager:
   tags:
   - GridCell
   - Trash
+  - Enemy
   layers:
   - Default
   - TransparentFX
