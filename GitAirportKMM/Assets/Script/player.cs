@@ -158,6 +158,11 @@ public class Player : MonoBehaviour
     /// </summary>
     private void OnTriggerEnter2D(Collider2D collision)
     {
+        if (collision.CompareTag("GridCell"))
+        {
+            var cell = collision.GetComponent<Cell>();
+            cell?.ActivateCell();
+        }
         if (collision.CompareTag("Trash"))
         {
             GameManager.Instance.CollectItem();
