@@ -1,198 +1,110 @@
-using System.Collections;
 using UnityEngine;
 
+/// <summary>
+/// 적 타입 정의: Static(고정), Walker(직선 이동)
+/// </summary>
 public enum EnemyType
 {
-    Static,
-    Walker
+    Static, // 일정 시간 후 사라지는 적
+    Walker  // 직선 이동 후 화면 밖에서 사라지는 적
 }
 
+/// <summary>
+/// Enemy 클래스: Static은 제자리, Walker는 한 방향으로 쭉 이동
+/// </summary>
 public class Enemy : MonoBehaviour
 {
     public EnemyType enemyType = EnemyType.Static;
-    public float staticLifeTime = 3f;
-    public float walkerSpeed = 2f;
-    public float outOfGridDestroyDelay = 3f;
 
-    private Vector2Int hexPos;
-    private Vector2Int moveDir;
-    private float timer = 0f;
-    private bool isOutOfGrid = false;
-    private float outTimer = 0f;
+    [Header("Static 타입 설정")]
+    public float staticLifeTime = 3f; // Static 타입 수명
 
-    public void Init(Vector2Int spawnHex, EnemyType type, Vector2Int dir)
+    [Header("Walker 타입 설정")]
+    public float walkerSpeed = 2f;    // Walker 타입 이동 속도
+    private Vector2 moveDirection;    // Walker 이동 방향(단위 벡터)
+
+    /// <summary>
+    /// EnemySpawner에서 적 생성시 타입/방향 지정
+    /// </summary>
+    /// <param name="type">적 타입</param>
+    /// <param name="direction">Walker 이동 방향(Vector2Int)</param>
+    public void Init(EnemyType type, Vector2Int direction)
     {
-        hexPos = spawnHex;
-        enemyType = type;
-        moveDir = dir;
-        transform.position = GameManager.Instance.player.HexToWorld(hexPos);
-        timer = (enemyType == EnemyType.Static) ? staticLifeTime : 9999f;
-        isOutOfGrid = false;
-        outTimer = outOfGridDestroyDelay;
+        this.enemyType = type;
+        // 반드시 Vector2로 변환 후 normalized!
+        this.moveDirection = ((Vector2)direction).normalized;
+
+        if (this.enemyType == EnemyType.Static)
+        {
+            Destroy(gameObject, staticLifeTime); // Static은 일정 시간 후 Destroy
+        }
     }
 
     void Update()
     {
-        if (enemyType == EnemyType.Static)
+        // Walker 타입이면 매 프레임 지정 방향으로 이동
+        if (enemyType == EnemyType.Walker)
         {
-            timer -= Time.deltaTime;
-            if (timer <= 0f) Destroy(gameObject);
-        }
-        else if (enemyType == EnemyType.Walker)
-        {
-            WalkerUpdate();
-        }
-    }
-
-    void WalkerUpdate()
-    {
-        if (!isOutOfGrid)
-        {
-            Vector2Int nextHex = hexPos + moveDir;
-            if (GameManager.Instance.IsCellExists(nextHex))
-            {
-                hexPos = nextHex;
-                transform.position = GameManager.Instance.player.HexToWorld(hexPos);
-            }
-            else
-            {
-                isOutOfGrid = true;
-                // 여기서 바로 사라지지 않고 3초 기다림
-            }
-        }
-        else
-        {
-            outTimer -= Time.deltaTime;
-            if (outTimer <= 0f)
-                Destroy(gameObject);
-        }
-    }
-
-    private void OnTriggerEnter2D(Collider2D collision)
-    {
-        if (collision.CompareTag("Player"))
-        {
-            var player = collision.GetComponent<Player>();
-            if (player != null)
-                player.OnEnemyHit(hexPos);
-        }
-    }
-}
-
-/*
-public enum EnemyType
-{
-    Static, // 고정형
-    Walker  // 한 방향 이동형
-}
-
-public class Enemy : MonoBehaviour
-{
-    [Header("타입별 설정")]
-    public EnemyType enemyType = EnemyType.Static;
-    public float staticLifeTime = 3f;           // 고정형일 때 생존 시간
-    public float walkerSpeed = 2f;              // 이동형일 때 이동 속도 (현재 로직에서는 즉시 이동)
-    public float outOfGridDestroyDelay = 3f;    // 이동형이 그리드를 벗어난 후 사라지기까지의 시간
-
-    [Header("내부 상태 변수")]
-    private Vector2Int hexPos;                  // 현재 그리드 좌표
-    private Vector2Int moveDir;                 // 이동 방향 (Walker 타입용)
-    private float lifeTimer = 0f;               // 생존 시간 타이머
-    private bool isOutOfGrid = false;           // 그리드 이탈 여부
-    private float outOfGridTimer = 0f;          // 그리드 이탈 후 타이머
-
-    /// <summary>
-    /// 스포너에서 적을 생성할 때 호출하는 초기화 함수
-    /// </summary>
-    public void Init(Vector2Int spawnHex, EnemyType type, Vector2Int dir)
-    {
-        // 기본 정보 설정
-        hexPos = spawnHex;
-        enemyType = type;
-        moveDir = dir;
-        transform.position = GameManager.Instance.player.HexToWorld(hexPos);
-
-        // 타입에 따른 타이머 초기화
-        if (enemyType == EnemyType.Static)
-        {
-            lifeTimer = staticLifeTime;
-        }
-
-        // 상태 초기화
-        isOutOfGrid = false;
-        outOfGridTimer = outOfGridDestroyDelay;
-    }
-
-    void Update()
-    {
-        // 타입에 따라 다른 업데이트 로직 실행
-        if (enemyType == EnemyType.Static)
-        {
-            StaticTypeUpdate();
-        }
-        else if (enemyType == EnemyType.Walker)
-        {
-            WalkerTypeUpdate();
+            transform.Translate(moveDirection * walkerSpeed * Time.deltaTime, Space.World);
         }
     }
 
     /// <summary>
-    /// 고정형(Static) 타입의 업데이트 로직
+    /// Walker 타입이 카메라 밖으로 벗어나면 자동 Destroy
     /// </summary>
-    private void StaticTypeUpdate()
+    private void OnBecameInvisible()
     {
-        lifeTimer -= Time.deltaTime;
-        if (lifeTimer <= 0f)
+        if (enemyType == EnemyType.Walker)
         {
             Destroy(gameObject);
         }
     }
 
     /// <summary>
-    /// 이동형(Walker) 타입의 업데이트 로직
-    /// </summary>
-    private void WalkerTypeUpdate()
-    {
-        // 아직 그리드 안에 있을 때
-        if (!isOutOfGrid)
-        {
-            // 한 프레임에 한 칸씩 즉시 이동 (부드러운 이동을 원하면 수정 필요)
-            Vector2Int nextHex = hexPos + moveDir;
-            if (GameManager.Instance.IsCellExists(nextHex))
-            {
-                hexPos = nextHex;
-                transform.position = GameManager.Instance.player.HexToWorld(hexPos);
-            }
-            else
-            {
-                // 그리드를 벗어남
-                isOutOfGrid = true;
-            }
-        }
-        // 그리드를 벗어났을 때
-        else
-        {
-            outOfGridTimer -= Time.deltaTime;
-            if (outOfGridTimer <= 0f)
-            {
-                Destroy(gameObject);
-            }
-        }
-    }
-
-    /// <summary>
-    /// 플레이어와 충돌했을 때 처리
+    /// 플레이어와 충돌 체크 (필요에 따라 구현)
     /// </summary>
     private void OnTriggerEnter2D(Collider2D collision)
     {
         if (collision.CompareTag("Player"))
         {
-            var player = collision.GetComponent<Player>();
+            Player player = collision.GetComponent<Player>();
             if (player != null)
             {
-                player.OnEnemyHit(hexPos);
+                // 충돌방향 = Enemy → Player 방향 (즉, Player가 Enemy 반대방향으로 팅김)
+                Vector2 hitDir = (player.transform.position - transform.position).normalized;
+
+                // 가장 가까운 6방향 중 하나로 변환 (헥사)
+                Vector2Int knockbackDir = GetClosestHexDirection(hitDir);
+
+                player.Knockback(knockbackDir);
+                player.Hit(1); // HP 1 감소
+
+                Debug.Log("Enemy가 Player와 충돌! 한 칸 팅김 + HP 1 깎임");
             }
         }
     }
+
+    /// <summary>
+    /// 실수방향을 헥사 그리드 6방향(Vector2Int) 중 가장 가까운 방향으로 변환
+    /// </summary>
+    private Vector2Int GetClosestHexDirection(Vector2 hitDir)
+    {
+        Vector2Int[] hexDirs = {
+        new Vector2Int(1,0), new Vector2Int(0,1), new Vector2Int(-1,1),
+        new Vector2Int(-1,0), new Vector2Int(0,-1), new Vector2Int(1,-1)
+    };
+        float maxDot = -Mathf.Infinity;
+        Vector2Int bestDir = hexDirs[0];
+        foreach (var dir in hexDirs)
+        {
+            float dot = Vector2.Dot(hitDir, ((Vector2)dir).normalized);
+            if (dot > maxDot)
+            {
+                maxDot = dot;
+                bestDir = dir;
+            }
+        }
+        return bestDir;
+    }
+
 }
-*/

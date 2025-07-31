@@ -45,10 +45,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   enemyPrefabs:
-  - {fileID: 7789762737884506464, guid: 7eaf70e10f0cd49b2b9e79c0f9c777eb, type: 3}
   - {fileID: 8030836073739583056, guid: 53562a005330a4051b82544d96076951, type: 3}
+  - {fileID: 7789762737884506464, guid: 7eaf70e10f0cd49b2b9e79c0f9c777eb, type: 3}
   - {fileID: 1807942296897421664, guid: 28583f589e39047bb92f99f3a0b8ecd4, type: 3}
   - {fileID: 7426910342641244850, guid: a69dbd43604ff47f58be5b1738ce84c2, type: 3}
   spawnInterval: 4
   maxSpawnCount: 4
   maxTotalEnemies: 4
+  gridWidth: 9
+  gridHeight: 9

@@ -153,9 +153,34 @@ public class Player : MonoBehaviour
         return new Vector2Int(q, r);
     }
 
+    public void Knockback(Vector2 hitDirection)
+    {
+        // hexPos는 플레이어의 현재 헥사 좌표라고 가정
+        Vector2Int knockbackHex = hexPos + Vector2Int.RoundToInt(hitDirection);
+        if (GameManager.Instance.IsCellExists(knockbackHex))
+        {
+            hexPos = knockbackHex;
+            transform.position = HexToWorld(hexPos);
+        }
+        else
+        {
+            // 바깥으로 나가면 안 움직임(혹은 벽에 부딪힘 연출 등)
+        }
+    }
+
+    public void Hit(int damage)
+    {
+        nHP -= damage;
+        if (nHP <= 0)
+        {
+            // 게임 오버 처리 등
+        }
+    }
+
     /// <summary>
     /// 트리거 충돌 처리(아이템 등)
     /// </summary>
+
     private void OnTriggerEnter2D(Collider2D collision)
     {
         if (collision.CompareTag("GridCell"))
