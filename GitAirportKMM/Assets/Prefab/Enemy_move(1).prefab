@@ -138,6 +138,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   enemyType: 1
-  staticLifeTime: 5
+  staticLifeTime: 25
   walkerSpeed: 3
-  outOfGridDestroyDelay: 3
+  outOfGridDestroyDelay: 5
