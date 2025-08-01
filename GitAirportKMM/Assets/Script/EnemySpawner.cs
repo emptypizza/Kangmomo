@@ -30,7 +30,8 @@ public class EnemySpawner : MonoBehaviour
         }
     }
 
-    public void SpawnEnemyWave()
+    public void SpawnEnemyWave()    
+                                   /// 적 웨이브를 생성합니다.
     {
         int currentEnemies = GameObject.FindGameObjectsWithTag("Enemy").Length;
         if (currentEnemies >= maxTotalEnemies) return;
@@ -49,12 +50,13 @@ public class EnemySpawner : MonoBehaviour
         }
     }
 
-    void SpawnStaticEnemy_NoOverlap()
+    void SpawnStaticEnemy_NoOverlap() //Static 타입 적을 겹치지 않게 생성합니다.
     {
         GameManager gm = GameManager.Instance;
         if (gm == null || gm.player == null) return;
+        // 1. 스폰 불가능한 위치(다른 Static 적, 플레이어 위치) 목록 생성
+        HashSet<Vector2Int> occupied = new HashSet<Vector2Int>();// ㅎㅐ쉬셋
 
-        HashSet<Vector2Int> occupied = new HashSet<Vector2Int>();
         foreach (var enemy in GameObject.FindGameObjectsWithTag("Enemy"))
         {
             Enemy e = enemy.GetComponent<Enemy>();
@@ -67,7 +69,7 @@ public class EnemySpawner : MonoBehaviour
 
         occupied.Add(gm.player.WorldToHex(gm.player.transform.position));
 
-        List<Vector2Int> candidates = new List<Vector2Int>();
+        List<Vector2Int> candidates = new List<Vector2Int>();// 2. 스폰 가능한 빈 셀 목록 생성
         for (int x = 0; x < gm.gridWidth; x++)
         {
             for (int y = 0; y < gm.gridHeight; y++)
@@ -79,8 +81,8 @@ public class EnemySpawner : MonoBehaviour
         }
 
         if (candidates.Count == 0) return;
-
-        Vector2Int spawnHex = candidates[Random.Range(0, candidates.Count)];
+        // 3. 생성 및 초기화
+        Vector2Int spawnHex = candidates[Random.Range(0, candidates.Count)];  
         Vector3 spawnWorldPos = gm.player.HexToWorld(spawnHex);
 
         GameObject prefab = enemyPrefabs.Length > 0 ? enemyPrefabs[0] : null;
@@ -91,33 +93,56 @@ public class EnemySpawner : MonoBehaviour
 
         Enemy enemyScript = enemyObj.GetComponent<Enemy>();
         if (enemyScript != null)
-            enemyScript.Init(spawnHex, EnemyType.Static, Vector2Int.zero); // ✅ 호출 복원됨
+            enemyScript.Init(spawnHex, EnemyType.Static, Vector2Int.zero); // 호출 복원됨
     }
 
-    void SpawnWalkerAtEdge()
+    void SpawnWalkerAtEdge()    /// Walker 타입 적을 그리드 가장자리에서 생성합니다.
     {
         GameManager gm = GameManager.Instance;
-        if (gm == null || gm.player == null) return;
 
-        // 랜덤 가장자리 스폰
-        List<(Vector2Int, Vector2Int)> edgeSpawns = new List<(Vector2Int, Vector2Int)>();
-
+        // 1. 모든 가장자리 위치와 해당 방향 목록 생성
+        List<(Vector2Int, Vector2Int)> edgePoints = new List<(Vector2Int, Vector2Int)>(); // 랜덤 가장자리 스폰
         int width = gm.gridWidth;
         int height = gm.gridHeight;
 
+       // if (gm == null || gm.player == null) return;
+
+       
+   
         for (int x = 0; x < width; x++)
         {
-            edgeSpawns.Add((new Vector2Int(x, 0), new Vector2Int(0, 1))); // 아래
-            edgeSpawns.Add((new Vector2Int(x, height - 1), new Vector2Int(0, -1))); // 위
+            edgePoints.Add((new Vector2Int(x, 0), Vector2Int.up)); // 아래에서 위
+            edgePoints.Add((new Vector2Int(x, height - 1), Vector2Int.down)); // 위에서아 
         }
-        for (int y = 0; y < height; y++)
-        {
-            edgeSpawns.Add((new Vector2Int(0, y), new Vector2Int(1, 0))); // 왼쪽
-            edgeSpawns.Add((new Vector2Int(width - 1, y), new Vector2Int(-1, 0))); // 오른쪽
+        for (int y = 1; y < height - 1; y++)
+        { // 모서리는 중복되므로 제외
+            edgePoints.Add((new Vector2Int(0, y), Vector2Int.right));   // 왼쪽에서 오른쪽으로
+            edgePoints.Add((new Vector2Int(width - 1, y), Vector2Int.left)); // 오른쪽에서 왼쪽으로
         }
 
-        var pair = edgeSpawns[Random.Range(0, edgeSpawns.Count)];
-        Vector2Int spawnHex = pair.Item1;
+
+        if (edgePoints.Count == 0) return;
+
+
+        // 2. 랜덤한 가장자리 선택
+        var (spawnHex, moveDir) = edgePoints[Random.Range(0, edgePoints.Count)];
+
+
+        // 3. 생성 및 초기화
+        Vector3 spawnWorldPos = gm.player.HexToWorld(spawnHex);
+        GameObject prefab = enemyPrefabs[1];
+        GameObject enemyObj = Instantiate(prefab, spawnWorldPos, Quaternion.identity);
+        enemyObj.tag = "Enemy";
+
+
+        Enemy enemyScript = enemyObj.GetComponent<Enemy>();
+        if (enemyScript != null)
+            enemyScript.Init(spawnHex, EnemyType.Walker, moveDir);
+
+
+
+        /* var pair = edgeSpawns[Random.Range(0, edgeSpawns.Count)];
+         Vector2Int spawnHex = pair.Item1;
         Vector2Int moveDir = pair.Item2;
 
         Vector3 spawnWorldPos = gm.player.HexToWorld(spawnHex);
@@ -129,6 +154,6 @@ public class EnemySpawner : MonoBehaviour
 
         Enemy enemyScript = enemyObj.GetComponent<Enemy>();
         if (enemyScript != null)
-            enemyScript.Init(spawnHex, EnemyType.Walker, moveDir); //  호출 복원됨
+            enemyScript.Init(spawnHex, EnemyType.Walker, moveDir); */ // GPT4o code
     }
 }
