@@ -13,12 +13,16 @@ public class Player : MonoBehaviour
     public int nHP = 3;
 
     private Rigidbody2D rb;
+    private SpriteRenderer spriteRenderer;
     public bool isMoving = false;
+    private bool isKnockback = false;
+    private bool isInvincible = false;
     private Vector2Int currentHex; // 플레이어의 현재 헥사 좌표
 
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
+        spriteRenderer = GetComponent<SpriteRenderer>();
         rb.isKinematic = true; // 물리 효과 대신 스크립트로 위치를 제어하므로 Kinematic으로 설정
     }
 
@@ -76,13 +80,18 @@ public class Player : MonoBehaviour
     /// </summary>
     public void Hit(int damage)
     {
+        if (isInvincible) return;
+
         nHP -= damage;
         Debug.Log($"HP 감소! 현재 HP: {nHP}");
         if (nHP <= 0)
         {
             Debug.Log("게임 오버");
-            // 여기에 게임 오버 로직 추가
+            if (GameManager.Instance != null)
+                GameManager.Instance.GameOver();
         }
+
+        StartCoroutine(InvincibilityCoroutine());
     }
 
 
@@ -110,6 +119,7 @@ public class Player : MonoBehaviour
     private IEnumerator KnockbackCoroutine(Vector2Int targetHex)
     {
         isMoving = true; // 기존 이동과 충돌 방지
+        isKnockback = true;
 
         Vector3 start = transform.position;
         Vector3 end = HexToWorld(targetHex);
@@ -128,6 +138,7 @@ public class Player : MonoBehaviour
         currentHex = targetHex;
 
         isMoving = false;
+        isKnockback = false;
     }
 
 
@@ -145,8 +156,32 @@ public class Player : MonoBehaviour
         }
         else if (other.CompareTag("GridCell"))
         {
-            other.GetComponent<Cell>()?.ActivateCell();
+            if (!isKnockback)
+                other.GetComponent<Cell>()?.ActivateCell();
         }
+    }
+
+    private IEnumerator InvincibilityCoroutine()
+    {
+        isInvincible = true;
+
+        float elapsed = 0f;
+        bool visible = true;
+        while (elapsed < 2f)
+        {
+            if (spriteRenderer != null)
+            {
+                visible = !visible;
+                spriteRenderer.enabled = visible;
+            }
+            yield return new WaitForSeconds(0.2f);
+            elapsed += 0.2f;
+        }
+
+        if (spriteRenderer != null)
+            spriteRenderer.enabled = true;
+
+        isInvincible = false;
     }
 
 
