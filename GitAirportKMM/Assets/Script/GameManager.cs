@@ -156,10 +156,10 @@ public class GameManager : MonoBehaviour
         Debug.Log($"[Item] 획득: {itemCount}개"); // 콘솔에 로그를 출력하여 확인합니다.
 
         // 게임 클리어 조건 2: 획득한 아이템 개수가 목표 개수 이상인지 확인합니다.
-        if (itemCount >= clearItemCount)
-        {
+       // if (itemCount >= clearItemCount)
+       if(player.nHP > 10)// 임시 로 HP > 10인 경우 게임 클리어
             GameClear(); // 조건을 만족하면 게임 클리어 처리 함수를 호출합니다.
-        }
+        
     }
 
     /// <summary>

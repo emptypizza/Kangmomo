@@ -1,67 +1,129 @@
+using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// 적 타입 정의: Static(고정), Walker(직선 이동)
+/// 적 타입 열거형 - 고정형 Static, 이동형 Walker
 /// </summary>
 public enum EnemyType
 {
-    Static, // 일정 시간 후 사라지는 적
-    Walker  // 직선 이동 후 화면 밖에서 사라지는 적
+    Static,
+    Walker
 }
 
 /// <summary>
-/// Enemy 클래스: Static은 제자리, Walker는 한 방향으로 쭉 이동
+/// Enemy 클래스 - Static은 일정 시간 후 제거, Walker는 그리드를 따라 이동
 /// </summary>
 public class Enemy : MonoBehaviour
 {
     public EnemyType enemyType = EnemyType.Static;
 
     [Header("Static 타입 설정")]
-    public float staticLifeTime = 3f; // Static 타입 수명
+    public float staticLifeTime = 3f;
 
-    [Header("Walker 타입 설정")]
-    public float walkerSpeed = 2f;    // Walker 타입 이동 속도
-    private Vector2 moveDirection;    // Walker 이동 방향(단위 벡터)
+    [Header("Walker 설정")]
+    public float walkerSpeed = 2f;             // Walker 속도 (유닛/초)
+    public float outOfGridDestroyDelay = 3f;   // 그리드 밖 나간 후 제거 대기 시간
+
+    // 내부 상태
+    private Vector2Int hexPos;        // 현재 헥사 좌표
+    private Vector2Int moveDir;       // 이동 방향 (Walker용)
+    private float timer = 0f;         // Static 생존 시간
+    private float outTimer = 0f;      // 화면 밖 대기 타이머
+    private bool isOutOfGrid = false; // Walker가 그리드 밖으로 나갔는지
+    private bool isWalking = false;   // Walker가 현재 이동 중인지
 
     /// <summary>
-    /// EnemySpawner에서 적 생성시 타입/방향 지정
+    /// 외부에서 적 생성 시 호출되는 초기화 함수
     /// </summary>
-    /// <param name="type">적 타입</param>
-    /// <param name="direction">Walker 이동 방향(Vector2Int)</param>
-    public void Init(EnemyType type, Vector2Int direction)
+    public void Init(Vector2Int spawnHex, EnemyType type, Vector2Int dir)
     {
-        this.enemyType = type;
-        // 반드시 Vector2로 변환 후 normalized!
-        this.moveDirection = ((Vector2)direction).normalized;
+        hexPos = spawnHex;
+        enemyType = type;
+        moveDir = dir;
 
-        if (this.enemyType == EnemyType.Static)
-        {
-            Destroy(gameObject, staticLifeTime); // Static은 일정 시간 후 Destroy
-        }
+        transform.position = GameManager.Instance.player.HexToWorld(hexPos);
+
+        if (enemyType == EnemyType.Static)
+            timer = staticLifeTime;
+        else
+            timer = 9999f;
+
+        isOutOfGrid = false;
+        outTimer = outOfGridDestroyDelay;
     }
 
     void Update()
     {
-        // Walker 타입이면 매 프레임 지정 방향으로 이동
-        if (enemyType == EnemyType.Walker)
+        if (enemyType == EnemyType.Static)
         {
-            transform.Translate(moveDirection * walkerSpeed * Time.deltaTime, Space.World);
+            timer -= Time.deltaTime;
+            if (timer <= 0f)
+                Destroy(gameObject);
+        }
+        else if (enemyType == EnemyType.Walker)
+        {
+            WalkerUpdate();
         }
     }
 
     /// <summary>
-    /// Walker 타입이 카메라 밖으로 벗어나면 자동 Destroy
+    /// Walker 전용 Update 로직: 한 칸씩 이동하며 그리드 밖 나가면 제거 대기
     /// </summary>
-    private void OnBecameInvisible()
+    void WalkerUpdate()
     {
-        if (enemyType == EnemyType.Walker)
+        if (isWalking) return;
+
+        if (!isOutOfGrid)
         {
-            Destroy(gameObject);
+            Vector2Int nextHex = hexPos + moveDir;
+            if (GameManager.Instance.IsCellExists(nextHex))
+            {
+                StartCoroutine(WalkToHex(nextHex));
+            }
+            else
+            {
+                isOutOfGrid = true;
+            }
+        }
+        else
+        {
+            outTimer -= Time.deltaTime;
+            if (outTimer <= 0f)
+                Destroy(gameObject);
         }
     }
 
     /// <summary>
-    /// 플레이어와 충돌 체크 (필요에 따라 구현)
+    /// Walker가 한 칸 부드럽게 이동하는 코루틴 (속도 반영)
+    /// </summary>
+    private IEnumerator WalkToHex(Vector2Int targetHex)
+    {
+        isWalking = true;
+
+        Vector3 start = transform.position;
+        Vector3 end = GameManager.Instance.player.HexToWorld(targetHex);
+
+        float dist = Vector3.Distance(start, end);
+        float travelTime = dist / walkerSpeed;
+        float elapsed = 0f;
+
+        while (elapsed < travelTime)
+        {
+            transform.position = Vector3.Lerp(start, end, elapsed / travelTime);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        transform.position = end;
+        hexPos = targetHex;
+
+        isWalking = false;
+
+        yield return new WaitForSeconds(0.05f); // 살짝 텀 두고 다음 이동
+    }
+
+    /// <summary>
+    /// 플레이어와 충돌 시 넉백 및 HP 감소 처리
     /// </summary>
     private void OnTriggerEnter2D(Collider2D collision)
     {
@@ -70,31 +132,31 @@ public class Enemy : MonoBehaviour
             Player player = collision.GetComponent<Player>();
             if (player != null)
             {
-                // 충돌방향 = Enemy → Player 방향 (즉, Player가 Enemy 반대방향으로 팅김)
+                // Enemy → Player 방향을 기준으로 반대방향 넉백
                 Vector2 hitDir = (player.transform.position - transform.position).normalized;
-
-                // 가장 가까운 6방향 중 하나로 변환 (헥사)
                 Vector2Int knockbackDir = GetClosestHexDirection(hitDir);
 
                 player.Knockback(knockbackDir);
-                player.Hit(1); // HP 1 감소
+                player.Hit(1);
 
-                Debug.Log("Enemy가 Player와 충돌! 한 칸 팅김 + HP 1 깎임");
+                Debug.Log("적 충돌: 넉백 + HP 감소");
             }
         }
     }
 
     /// <summary>
-    /// 실수방향을 헥사 그리드 6방향(Vector2Int) 중 가장 가까운 방향으로 변환
+    /// 벡터 방향을 가장 가까운 헥사 6방향으로 변환
     /// </summary>
-    private Vector2Int GetClosestHexDirection(Vector2 hitDir)
+    Vector2Int GetClosestHexDirection(Vector2 hitDir)
     {
         Vector2Int[] hexDirs = {
-        new Vector2Int(1,0), new Vector2Int(0,1), new Vector2Int(-1,1),
-        new Vector2Int(-1,0), new Vector2Int(0,-1), new Vector2Int(1,-1)
-    };
+            new Vector2Int(1, 0),  new Vector2Int(0, 1),  new Vector2Int(-1, 1),
+            new Vector2Int(-1, 0), new Vector2Int(0, -1), new Vector2Int(1, -1)
+        };
+
         float maxDot = -Mathf.Infinity;
         Vector2Int bestDir = hexDirs[0];
+
         foreach (var dir in hexDirs)
         {
             float dot = Vector2.Dot(hitDir, ((Vector2)dir).normalized);
@@ -104,7 +166,7 @@ public class Enemy : MonoBehaviour
                 bestDir = dir;
             }
         }
+
         return bestDir;
     }
-
 }
