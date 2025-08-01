@@ -48,10 +48,14 @@ public class GameManager : MonoBehaviour
     public int clearItemCount = 10; // Day 클리어를 위해 필요한 아이템(폐지) 획득 개수입니다.
     public float clearTime = 600f; // Day 클리어를 위한 생존 시간 목표 (600초 = 10분) 입니다.
 
+    [Header("Game Over Settings")]
+    public Text gameOverText; // 게임 오버 시 표시할 UI 텍스트
+
     // --- 내부 상태 변수 --- //
     private GameObject[,] gridObjects; // 생성된 그리드 셀 오브젝트들을 2차원 배열로 저장하여 관리합니다.
     private int itemCount = 0;         // 현재까지 획득한 아이템의 개수를 저장합니다.
     private bool isGameCleared = false; // 게임 클리어 상태인지 여부를 저장하는 플래그(flag)입니다. (중복 처리 방지용)
+    private bool isGameOver = false;    // 게임 오버 상태 플래그
 
     /// <summary>
     /// 플레이어의 현재 월드 좌표를 반환합니다.
@@ -91,6 +95,9 @@ public class GameManager : MonoBehaviour
         // clearText UI가 할당되었다면, 게임 시작 시에는 보이지 않도록 비활성화합니다.
         if (clearText != null)
             clearText.gameObject.SetActive(false);
+
+        if (gameOverText != null)
+            gameOverText.gameObject.SetActive(false);
     }
 
     /// <summary>
@@ -98,8 +105,13 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private void Update()
     {
-        // 만약 이미 게임이 클리어된 상태라면, 더 이상 아래 로직을 실행하지 않고 함수를 종료합니다.
-        if (isGameCleared) return;
+        // 게임 클리어 또는 오버 상태에서는 클릭 시 게임을 재시작합니다.
+        if (isGameCleared || isGameOver)
+        {
+            if (Input.GetMouseButtonDown(0))
+                RestartGame();
+            return;
+        }
 
         // 게임 클리어 조건 1: 생존 시간이 목표 시간을 초과했는지 확인합니다.
         if (GameTime >= clearTime)
@@ -177,6 +189,29 @@ public class GameManager : MonoBehaviour
             clearText.gameObject.SetActive(true); // UI를 활성화하여 화면에 보이게 합니다.
         }
         Debug.Log("Day1 Stage Clear!"); // 콘솔에도 클리어 메시지를 출력합니다.
+    }
+
+    /// <summary>
+    /// 플레이어의 HP가 0이 되었을 때 호출되는 게임 오버 처리 함수입니다.
+    /// </summary>
+    public void GameOver()
+    {
+        isGameOver = true;
+        Time.timeScale = 0f;
+
+        if (gameOverText != null)
+            gameOverText.gameObject.SetActive(true);
+
+        Debug.Log("Game Over");
+    }
+
+    /// <summary>
+    /// 현재 씬을 다시 불러와 게임을 재시작합니다.
+    /// </summary>
+    public void RestartGame()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
     // --- 외부 제공 함수 및 프로퍼티들 --- //

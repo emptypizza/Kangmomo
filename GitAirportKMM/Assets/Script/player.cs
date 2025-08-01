@@ -81,7 +81,8 @@ public class Player : MonoBehaviour
         if (nHP <= 0)
         {
             Debug.Log("게임 오버");
-            // 여기에 게임 오버 로직 추가
+            if (GameManager.Instance != null)
+                GameManager.Instance.GameOver();
         }
     }
 
