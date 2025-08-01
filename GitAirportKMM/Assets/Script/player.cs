@@ -17,18 +17,20 @@ public class Player : MonoBehaviour
     public bool isMoving = false;
     private bool isKnockback = false;
     private bool isInvincible = false;
-    private Vector2Int currentHex; // 플레이어의 현재 헥사 좌표
+    private Vector2Int currentHex;
+
+    [Header("넉백 설정")]
+    public int knockbackDistance = 0; // 넉백 칸 수 (0: 한 칸만 튕김)
 
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         spriteRenderer = GetComponent<SpriteRenderer>();
-        rb.isKinematic = true; // 물리 효과 대신 스크립트로 위치를 제어하므로 Kinematic으로 설정
+        rb.isKinematic = true;
     }
 
     void Start()
     {
-        // 게임 시작 시 그리드 중앙에 플레이어 배치
         if (GameManager.Instance != null)
         {
             currentHex = GameManager.Instance.GetGridCenter();
@@ -36,9 +38,6 @@ public class Player : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// UIcode로부터 받은 경로(path)를 따라 한 칸씩 이동하는 코루틴을 시작합니다.
-    /// </summary>
     public void MoveByPath(List<Vector2Int> path)
     {
         if (isMoving || path == null || path.Count == 0)
@@ -47,9 +46,6 @@ public class Player : MonoBehaviour
         StartCoroutine(MovePathCoroutine(path));
     }
 
-    /// <summary>
-    /// 경로를 따라 실제로 이동을 처리하는 코루틴입니다.
-    /// </summary>
     private IEnumerator MovePathCoroutine(List<Vector2Int> path)
     {
         isMoving = true;
@@ -60,8 +56,7 @@ public class Player : MonoBehaviour
             Vector3 endPos = HexToWorld(targetHex);
             float journey = 0f;
 
-            // 한 칸을 부드럽게 이동
-            while (journey < 0.2f) // 0.2초 동안 한 칸 이동
+            while (journey < 0.2f)
             {
                 journey += Time.deltaTime;
                 float percent = Mathf.Clamp01(journey / 0.2f);
@@ -69,15 +64,12 @@ public class Player : MonoBehaviour
                 yield return null;
             }
             transform.position = endPos;
-            currentHex = targetHex; // 현재 위치 갱신
+            currentHex = targetHex;
         }
 
         isMoving = false;
     }
 
-    /// <summary>
-    /// 적과 충돌 시 HP 감소 및 넉백 처리
-    /// </summary>
     public void Hit(int damage)
     {
         if (isInvincible) return;
@@ -94,37 +86,33 @@ public class Player : MonoBehaviour
         StartCoroutine(InvincibilityCoroutine());
     }
 
-
-
+    /// <summary>
+    /// 넉백 방향 한 칸만 적용되도록 고정 구현
+    /// </summary>
     public void Knockback(Vector2Int knockbackDir)
     {
-
-        //if (isMoving) return;
-        // 현재 위치에서 한 칸 밀림
-        Vector2Int targetHex = currentHex + knockbackDir;
-        // 넉백될 위치가 맵 안인지 확인
-        if (GameManager.Instance.IsCellExists(targetHex))
-        {
-            /* currentHex = targetHex;
-            transform.position = HexToWorld(currentHex);*/
-            StopAllCoroutines(); // 이동 중이면 중단
-            StartCoroutine(KnockbackCoroutine(targetHex));
-        }
-        else
-        {
-            Debug.Log("넉백 불가: 바깥 셀");
-            // 필요 시 여기서 피격 애니메이션만 재생 가능
-        }
+        StopAllCoroutines();
+        StartCoroutine(KnockbackCoroutine(knockbackDir));
     }
-    private IEnumerator KnockbackCoroutine(Vector2Int targetHex)
+
+    /// <summary>
+    /// 넉백 1칸만 적용되며 확장 가능성은 유지
+    /// </summary>
+    private IEnumerator KnockbackCoroutine(Vector2Int knockbackDir)
     {
-        isMoving = true; // 기존 이동과 충돌 방지
+        isMoving = true;
         isKnockback = true;
 
-        Vector3 start = transform.position;
-        Vector3 end = HexToWorld(targetHex);
+        Vector2Int nextHex = currentHex + knockbackDir; // 한 칸만 넉백
+        if (!GameManager.Instance.IsCellExists(nextHex))
+        {
+            Debug.Log("넉백 종료: 맵 바깥");
+            yield break;
+        }
 
-        float duration = 0.15f; // 0.15초 동안 넉백
+        Vector3 start = transform.position;
+        Vector3 end = HexToWorld(nextHex);
+        float duration = 0.27f;
         float elapsed = 0f;
 
         while (elapsed < duration)
@@ -135,22 +123,17 @@ public class Player : MonoBehaviour
         }
 
         transform.position = end;
-        currentHex = targetHex;
+        currentHex = nextHex;
 
         isMoving = false;
         isKnockback = false;
     }
 
-
-    /// <summary>
-    /// 아이템 획득 등 트리거 충돌 처리
-    /// </summary>
     private void OnTriggerEnter2D(Collider2D other)
     {
         if (other.CompareTag("Trash"))
         {
             GameManager.Instance.CollectItem();
-           
             Destroy(other.gameObject);
             nHP += 1;
         }
@@ -184,9 +167,7 @@ public class Player : MonoBehaviour
         isInvincible = false;
     }
 
-
     #region Coordinate Conversion
-    // 이 좌표 변환 함수들은 GameManager의 것과 완벽히 동일해야 합니다.
     public Vector3 HexToWorld(Vector2Int hex)
     {
         if (GameManager.Instance == null) return Vector3.zero;

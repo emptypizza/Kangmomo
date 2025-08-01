@@ -337,7 +337,7 @@ GameObject:
   - component: {fileID: 700330733}
   - component: {fileID: 700330732}
   m_Layer: 0
-  m_Name: "LOST\uC624\uD504\uB2DD\uC2E0"
+  m_Name: LOSTOPENING
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1171,10 +1171,6 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3773407722218151566, guid: 6759eafd360d24ae39ddecf701a5b793, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 4134982777864112326, guid: 6759eafd360d24ae39ddecf701a5b793, type: 3}
-      propertyPath: m_IsTrigger
       value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
