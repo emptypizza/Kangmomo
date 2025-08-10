@@ -184,6 +184,7 @@ public class Enemy : MonoBehaviour
 
         player.Knockback(knockbackDir);
         player.Hit(1); // 데미지는 상수로 관리하면 더 좋습니다. e.g., private const int DAMAGE = 1;
+        SoundManager.Instance?.Play(SoundManager.SoundId.PlayerHit);
 
         Debug.Log($"적 충돌: 플레이어 넉백({knockbackDir}) 및 HP 감소");
 

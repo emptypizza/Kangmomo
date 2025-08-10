@@ -166,6 +166,7 @@ public class GameManager : MonoBehaviour
 
         itemCount++; // 아이템 카운트를 1 증가시킵니다.
         Debug.Log($"[Item] 획득: {itemCount}개"); // 콘솔에 로그를 출력하여 확인합니다.
+        SoundManager.Instance?.Play(SoundManager.SoundId.ItemPickup);
 
         // 게임 클리어 조건 2: 획득한 아이템 개수가 목표 개수 이상인지 확인합니다.
        // if (itemCount >= clearItemCount)
@@ -189,6 +190,7 @@ public class GameManager : MonoBehaviour
             clearText.gameObject.SetActive(true); // UI를 활성화하여 화면에 보이게 합니다.
         }
         Debug.Log("Day1 Stage Clear!"); // 콘솔에도 클리어 메시지를 출력합니다.
+        SoundManager.Instance?.StageClear();
     }
 
     /// <summary>
@@ -203,6 +205,7 @@ public class GameManager : MonoBehaviour
             gameOverText.gameObject.SetActive(true);
 
         Debug.Log("Game Over");
+        SoundManager.Instance?.GameOver();
     }
 
     /// <summary>
