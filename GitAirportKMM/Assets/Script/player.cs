@@ -19,6 +19,9 @@ public class Player : MonoBehaviour
     private bool isInvincible = false;
     private Vector2Int currentHex;
 
+    // 현재 플레이어가 그리고 있는 경로를 저장하는 리스트
+    private List<Vector2Int> currentPath = new List<Vector2Int>();
+
     [Header("넉백 설정")]
     public int knockbackDistance = 0; // 넉백 칸 수 (0: 한 칸만 튕김)
 
@@ -50,24 +53,54 @@ public class Player : MonoBehaviour
     {
         isMoving = true;
 
+        // 새로운 경로 시작 시, 기존 경로 리스트를 초기화하고 현재 위치를 추가합니다.
+        currentPath.Clear();
+        currentPath.Add(currentHex);
+
         foreach (var targetHex in path)
         {
+            // 이동하기 전에 현재 위치의 셀을 활성화시킵니다.
+            if (GameManager.Instance != null)
+            {
+                var cell = GameManager.Instance.GetCellAt(currentHex);
+                cell?.ActivateCell();
+            }
+
             Vector3 startPos = transform.position;
             Vector3 endPos = HexToWorld(targetHex);
             float journey = 0f;
 
-            while (journey < 0.2f)
+            // 이동 속도에 맞춰 이동 시간 계산 (예: 0.2초)
+            float moveDuration = 0.2f;
+
+            while (journey < moveDuration)
             {
                 journey += Time.deltaTime;
-                float percent = Mathf.Clamp01(journey / 0.2f);
+                float percent = Mathf.Clamp01(journey / moveDuration);
                 transform.position = Vector3.Lerp(startPos, endPos, percent);
                 yield return null;
             }
             transform.position = endPos;
             currentHex = targetHex;
+
+            // 경로 리스트에 새로운 위치를 추가합니다.
+            if (!currentPath.Contains(targetHex))
+            {
+                currentPath.Add(targetHex);
+            }
         }
 
+        // 마지막 위치의 셀도 활성화시킵니다.
+        var lastCell = GameManager.Instance.GetCellAt(currentHex);
+        lastCell?.ActivateCell();
+
         isMoving = false;
+
+        // 경로 완주 후, GameManager에 완성된 경로를 전달하여 영역 획득 로직을 처리합니다.
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.PlayerFinishedPath(currentPath);
+        }
     }
 
     public void Hit(int damage)

@@ -52,7 +52,7 @@ public class GameManager : MonoBehaviour
     public Text gameOverText; // 게임 오버 시 표시할 UI 텍스트
 
     // --- 내부 상태 변수 --- //
-    private GameObject[,] gridObjects; // 생성된 그리드 셀 오브젝트들을 2차원 배열로 저장하여 관리합니다.
+    private Dictionary<Vector2Int, Cell> cellGrid = new Dictionary<Vector2Int, Cell>(); // 그리드 좌표와 셀을 매핑
     private int itemCount = 0;         // 현재까지 획득한 아이템의 개수를 저장합니다.
     private bool isGameCleared = false; // 게임 클리어 상태인지 여부를 저장하는 플래그(flag)입니다. (중복 처리 방지용)
     private bool isGameOver = false;    // 게임 오버 상태 플래그
@@ -126,7 +126,7 @@ public class GameManager : MonoBehaviour
     /// </summary>
     void GenerateGrid()
     {
-        gridObjects = new GameObject[gridWidth, gridHeight];
+        cellGrid = new Dictionary<Vector2Int, Cell>();
 
         // 헥사곤 타일의 크기 및 간격 계산 (Flat-Top 기준)
         float width = 1f;
@@ -150,8 +150,15 @@ public class GameManager : MonoBehaviour
                 Vector3 cellPos = new Vector3(xPos, yPos, 0); // 최종 생성 위치입니다.
                 // Instantiate 함수로 gridCellPrefab을 생성하고, 위치와 회전, 부모를 지정해줍니다.
                 var obj = Instantiate(gridCellPrefab, cellPos, Quaternion.identity, gridParent);
-                // 생성된 셀 오브젝트를 gridObjects 배열에 저장하여 나중에 참조할 수 있게 합니다.
-                gridObjects[x, y] = obj;
+
+                // 셀 컴포넌트에 좌표를 설정하고 딕셔너리에 추가합니다.
+                var cell = obj.GetComponent<Cell>();
+                if (cell != null)
+                {
+                    Vector2Int hexCoord = new Vector2Int(x, y);
+                    cell.hexCoords = hexCoord;
+                    cellGrid[hexCoord] = cell;
+                }
             }
         }
     }
@@ -223,6 +230,151 @@ public class GameManager : MonoBehaviour
     /// 현재 획득한 아이템 개수(점수)를 반환하는 읽기 전용 프로퍼티입니다.
     /// </summary>
     public int CurrentScore => itemCount;
+
+    #region Land Grabbing System
+
+    /// <summary>
+    /// 지정된 헥사 좌표에 있는 Cell 컴포넌트를 반환합니다.
+    /// </summary>
+    public Cell GetCellAt(Vector2Int pos)
+    {
+        cellGrid.TryGetValue(pos, out Cell cell);
+        return cell;
+    }
+
+    /// <summary>
+    /// 플레이어가 경로 이동을 마쳤을 때 호출됩니다.
+    /// 경로가 닫힌 루프를 형성했는지 확인하고, 형성했다면 내부 영역을 점령합니다.
+    /// </summary>
+    public void PlayerFinishedPath(List<Vector2Int> path)
+    {
+        if (path == null || path.Count < 4) return; // 최소 사각형(A->B->C->A)을 만들려면 4개의 점이 필요
+
+        // 경로가 스스로와 교차하는지 확인하여 루프 형성 여부를 판단
+        Vector2Int lastPos = path[path.Count - 1];
+        int firstIndex = -1;
+        for (int i = 0; i < path.Count - 2; i++) // 마지막 점과 바로 전 점은 제외
+        {
+            if (path[i] == lastPos)
+            {
+                firstIndex = i;
+                break;
+            }
+        }
+
+        if (firstIndex == -1) return;
+
+        // 경로에서 실제 루프 부분만 추출
+        List<Vector2Int> loopPath = path.GetRange(firstIndex, path.Count - 1 - firstIndex);
+
+        // 루프 내부를 채울 영역 찾기 (Flood Fill)
+        List<Vector2Int> enclosedArea = FindEnclosedArea(loopPath);
+
+        // 영역이 존재하면 점령 처리
+        if (enclosedArea != null && enclosedArea.Count > 0)
+        {
+            Debug.Log($"[Territory] {enclosedArea.Count}개의 셀을 점령했습니다!");
+            int capturedCount = enclosedArea.Count;
+            // TODO: 점령한 셀 개수에 따라 점수나 재화 보상
+
+            // 점령된 영역의 셀 상태 변경
+            foreach (var pos in enclosedArea)
+            {
+                GetCellAt(pos)?.SetState(CellState.PlayerCaptured);
+            }
+        }
+
+        // 사용된 경로는 항상 중립으로 되돌림 (점령 성공 여부와 관계없이)
+        foreach (var pos in path)
+        {
+            var cell = GetCellAt(pos);
+            if (cell != null && cell.currentState != CellState.PlayerCaptured)
+            {
+                cell.SetState(CellState.Neutral);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 주어진 루프 경로에 의해 둘러싸인 영역을 찾습니다. (Flood Fill / BFS 알고리즘 사용)
+    /// </summary>
+    private List<Vector2Int> FindEnclosedArea(List<Vector2Int> loop)
+    {
+        HashSet<Vector2Int> loopSet = new HashSet<Vector2Int>(loop);
+        List<Vector2Int> potentialFills = new List<Vector2Int>();
+
+        foreach (var loopCellCoord in loop)
+        {
+            foreach (var neighbor in GetNeighbors(loopCellCoord))
+            {
+                if (!loopSet.Contains(neighbor) && IsCellExists(neighbor) && GetCellAt(neighbor).currentState == CellState.Neutral)
+                {
+                    potentialFills.Add(neighbor);
+                }
+            }
+        }
+
+        HashSet<Vector2Int> checkedStarts = new HashSet<Vector2Int>();
+
+        foreach (var startNode in potentialFills)
+        {
+            if (checkedStarts.Contains(startNode)) continue;
+
+            Queue<Vector2Int> queue = new Queue<Vector2Int>();
+            queue.Enqueue(startNode);
+            HashSet<Vector2Int> visited = new HashSet<Vector2Int> { startNode };
+            checkedStarts.Add(startNode);
+            bool touchesBoundary = false;
+
+            while (queue.Count > 0)
+            {
+                Vector2Int current = queue.Dequeue();
+                foreach (var neighbor in GetNeighbors(current))
+                {
+                    if (!IsCellExists(neighbor))
+                    {
+                        touchesBoundary = true;
+                        break;
+                    }
+                    if (visited.Contains(neighbor) || loopSet.Contains(neighbor)) continue;
+
+                    visited.Add(neighbor);
+                    checkedStarts.Add(neighbor);
+                    queue.Enqueue(neighbor);
+                }
+                if (touchesBoundary) break;
+            }
+
+            if (!touchesBoundary)
+            {
+                return new List<Vector2Int>(visited);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 특정 헥사 셀의 인접한 6개 셀의 좌표를 반환합니다. (Flat-Top, Odd-q)
+    /// </summary>
+    private Vector2Int[] GetNeighbors(Vector2Int hex)
+    {
+        if ((hex.x & 1) == 0) // Even columns
+        {
+            return new[] {
+                new Vector2Int(hex.x, hex.y + 1), new Vector2Int(hex.x + 1, hex.y), new Vector2Int(hex.x + 1, hex.y - 1),
+                new Vector2Int(hex.x, hex.y - 1), new Vector2Int(hex.x - 1, hex.y - 1), new Vector2Int(hex.x - 1, hex.y)
+            };
+        }
+        else // Odd columns
+        {
+            return new[] {
+                new Vector2Int(hex.x, hex.y + 1), new Vector2Int(hex.x + 1, hex.y + 1), new Vector2Int(hex.x + 1, hex.y),
+                new Vector2Int(hex.x, hex.y - 1), new Vector2Int(hex.x - 1, hex.y), new Vector2Int(hex.x - 1, hex.y + 1)
+            };
+        }
+    }
+
+    #endregion
 
     /// <summary>
     /// 그리드의 크기(가로, 세로 개수)를 Vector2Int 형태로 반환합니다.
