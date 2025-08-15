@@ -1,62 +1,103 @@
 using UnityEngine;
 
-// 셀의 상태를 나타내는 열거형입니다.
 public enum CellState
 {
-    Neutral,      // 중립 상태 (기본)
-    PlayerTrail,  // 플레이어가 지나간 길
-    PlayerCaptured // 플레이어가 점령한 영역
+    Neutral,
+    PlayerTrail,
+    PlayerCaptured
 }
 
 public class Cell : MonoBehaviour
 {
-    public Vector2Int hexCoords; // 셀의 헥사 그리드 좌표
-    public CellState currentState = CellState.Neutral; // 현재 셀의 상태
+    [Header("State")]
+    public CellState currentState = CellState.Neutral;
+    public Vector2Int hexCoords;
+
+    [Header("Settings")]
+    public float trailDuration = 5f; // 트레일 상태가 유지되는 시간
+
+    private float trailTimer = 0f;
     private SpriteRenderer spriteRenderer;
 
     private void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
-        UpdateColor(); // 초기 색상 설정
+        UpdateColor();
     }
 
-    /// <summary>
-    /// 플레이어가 이 셀에 들어왔을 때 호출됩니다.
-    /// 상태를 '지나간 길'로 변경합니다.
-    /// </summary>
-    public void ActivateCell()
+    private void Update()
     {
-        // 이미 점령된 땅은 다시 길로 만들 수 없습니다.
-        if (currentState == CellState.PlayerCaptured) return;
-
-        SetState(CellState.PlayerTrail);
+        // 트레일 상태일 때만 타이머를 작동시킵니다.
+        if (currentState == CellState.PlayerTrail)
+        {
+            trailTimer -= Time.deltaTime;
+            if (trailTimer <= 0)
+            {
+                // 시간이 다 되면 중립 상태로 되돌립니다.
+                SetState(CellState.Neutral);
+            }
+        }
     }
 
     /// <summary>
-    /// 셀의 상태를 변경하고 그에 맞는 색상으로 업데이트합니다.
+    /// 플레이어가 셀을 밟았을 때 호출됩니다.
+    /// 중립 상태일 경우에만 트레일 상태로 변경합니다.
     /// </summary>
-    /// <param name="newState">새로운 셀 상태</param>
+    public void ActivateTrail()
+    {
+        if (currentState == CellState.Neutral)
+        {
+            SetState(CellState.PlayerTrail);
+        }
+    }
+
+    /// <summary>
+    /// 셀의 상태를 지정하고, 상태에 따른 부가적인 처리를 합니다.
+    /// </summary>
     public void SetState(CellState newState)
     {
+        if (currentState == newState) return;
+
+        CellState oldState = currentState;
         currentState = newState;
+
+        // 상태 변경에 따른 처리
+        if (oldState == CellState.PlayerTrail)
+        {
+            // 트레일 상태에서 벗어날 때 GameManager에 알림
+            GameManager.Instance?.DeregisterTrailCell(this);
+        }
+
+        if (newState == CellState.PlayerTrail)
+        {
+            // 트레일 상태가 될 때 타이머를 설정하고 GameManager에 등록
+            trailTimer = trailDuration;
+            GameManager.Instance?.RegisterTrailCell(this);
+        }
+        else
+        {
+            // 다른 상태가 되면 타이머를 리셋
+            trailTimer = 0f;
+        }
+
         UpdateColor();
     }
 
     /// <summary>
-    /// 현재 상태에 따라 셀의 색상을 변경합니다.
+    /// 현재 상태에 따라 셀의 색상을 업데이트합니다.
     /// </summary>
     private void UpdateColor()
     {
         switch (currentState)
         {
             case CellState.Neutral:
-                spriteRenderer.color = Color.white; // 중립: 흰색
+                spriteRenderer.color = Color.white;
                 break;
             case CellState.PlayerTrail:
-                spriteRenderer.color = new Color(0.5f, 0.8f, 1f); // 길: 연한 파란색
+                spriteRenderer.color = new Color(0.5f, 0.8f, 1f); // Light Blue
                 break;
             case CellState.PlayerCaptured:
-                spriteRenderer.color = new Color(0.2f, 0.5f, 1f); // 점령지: 진한 파란색
+                spriteRenderer.color = new Color(0.2f, 0.5f, 1f); // Dark Blue
                 break;
         }
     }
