@@ -52,10 +52,11 @@ public class GameManager : MonoBehaviour
     public Text gameOverText; // 게임 오버 시 표시할 UI 텍스트
 
     // --- 내부 상태 변수 --- //
-    private Dictionary<Vector2Int, Cell> cellGrid = new Dictionary<Vector2Int, Cell>(); // 그리드 좌표와 셀을 매핑
-    private int itemCount = 0;         // 현재까지 획득한 아이템의 개수를 저장합니다.
-    private bool isGameCleared = false; // 게임 클리어 상태인지 여부를 저장하는 플래그(flag)입니다. (중복 처리 방지용)
-    private bool isGameOver = false;    // 게임 오버 상태 플래그
+    private Dictionary<Vector2Int, Cell> cellGrid = new Dictionary<Vector2Int, Cell>();
+    private List<Cell> activeTrail = new List<Cell>();
+    private int itemCount = 0;
+    private bool isGameCleared = false;
+    private bool isGameOver = false;
 
     /// <summary>
     /// 플레이어의 현재 월드 좌표를 반환합니다.
@@ -127,31 +128,26 @@ public class GameManager : MonoBehaviour
     void GenerateGrid()
     {
         cellGrid = new Dictionary<Vector2Int, Cell>();
+        activeTrail = new List<Cell>();
 
-        // 헥사곤 타일의 크기 및 간격 계산 (Flat-Top 기준)
         float width = 1f;
         float height = Mathf.Sqrt(3f) / 2f * width;
 
-        // 그리드를 화면 중앙에 정렬하기 위한 오프셋(offset)을 계산합니다.
         Vector2 offset = new Vector2(
             -width * 0.75f * (gridWidth - 1) / 2f,
             -height * (gridHeight - 1) / 2f
         );
 
-        // 이중 for문을 사용하여 정해진 가로, 세로 개수만큼 타일을 생성합니다.
         for (int x = 0; x < gridWidth; x++)
         {
             for (int y = 0; y < gridHeight; y++)
             {
-                // 헥사곤 좌표 규칙에 따라 각 셀의 월드 좌표(xPos, yPos)를 계산합니다.
                 float xPos = width * 0.75f * x + offset.x;
-                float yPos = height * (y + 0.5f * (x & 1)) + offset.y; // (x & 1)은 x가 홀수일 때만 1을 반환하여, 홀수 열을 반 칸 아래로 내립니다.
+                float yPos = height * (y + 0.5f * (x & 1)) + offset.y;
 
-                Vector3 cellPos = new Vector3(xPos, yPos, 0); // 최종 생성 위치입니다.
-                // Instantiate 함수로 gridCellPrefab을 생성하고, 위치와 회전, 부모를 지정해줍니다.
+                Vector3 cellPos = new Vector3(xPos, yPos, 0);
                 var obj = Instantiate(gridCellPrefab, cellPos, Quaternion.identity, gridParent);
 
-                // 셀 컴포넌트에 좌표를 설정하고 딕셔너리에 추가합니다.
                 var cell = obj.GetComponent<Cell>();
                 if (cell != null)
                 {
@@ -233,71 +229,49 @@ public class GameManager : MonoBehaviour
 
     #region Land Grabbing System
 
-    /// <summary>
-    /// 지정된 헥사 좌표에 있는 Cell 컴포넌트를 반환합니다.
-    /// </summary>
-    public Cell GetCellAt(Vector2Int pos)
+    public void RegisterTrailCell(Cell cell)
     {
-        cellGrid.TryGetValue(pos, out Cell cell);
-        return cell;
+        if (!activeTrail.Contains(cell))
+        {
+            activeTrail.Add(cell);
+        }
     }
 
-    /// <summary>
-    /// 플레이어가 경로 이동을 마쳤을 때 호출됩니다.
-    /// 경로가 닫힌 루프를 형성했는지 확인하고, 형성했다면 내부 영역을 점령합니다.
-    /// </summary>
-    public void PlayerFinishedPath(List<Vector2Int> path)
+    public void DeregisterTrailCell(Cell cell)
     {
-        if (path == null || path.Count < 4) return; // 최소 사각형(A->B->C->A)을 만들려면 4개의 점이 필요
+        activeTrail.Remove(cell);
+    }
 
-        // 경로가 스스로와 교차하는지 확인하여 루프 형성 여부를 판단
-        Vector2Int lastPos = path[path.Count - 1];
-        int firstIndex = -1;
-        for (int i = 0; i < path.Count - 2; i++) // 마지막 점과 바로 전 점은 제외
+    public void ProcessLoop()
+    {
+        if (activeTrail.Count < 3) return;
+
+        List<Vector2Int> loopCoords = new List<Vector2Int>();
+        foreach(var cell in activeTrail)
         {
-            if (path[i] == lastPos)
-            {
-                firstIndex = i;
-                break;
-            }
+            loopCoords.Add(cell.hexCoords);
         }
 
-        if (firstIndex == -1) return;
+        List<Vector2Int> enclosedArea = FindEnclosedArea(loopCoords);
 
-        // 경로에서 실제 루프 부분만 추출
-        List<Vector2Int> loopPath = path.GetRange(firstIndex, path.Count - 1 - firstIndex);
-
-        // 루프 내부를 채울 영역 찾기 (Flood Fill)
-        List<Vector2Int> enclosedArea = FindEnclosedArea(loopPath);
-
-        // 영역이 존재하면 점령 처리
         if (enclosedArea != null && enclosedArea.Count > 0)
         {
-            Debug.Log($"[Territory] {enclosedArea.Count}개의 셀을 점령했습니다!");
-            int capturedCount = enclosedArea.Count;
-            // TODO: 점령한 셀 개수에 따라 점수나 재화 보상
-
-            // 점령된 영역의 셀 상태 변경
+            Debug.Log($"[Territory] {enclosedArea.Count} cells captured!");
             foreach (var pos in enclosedArea)
             {
                 GetCellAt(pos)?.SetState(CellState.PlayerCaptured);
             }
         }
 
-        // 사용된 경로는 항상 중립으로 되돌림 (점령 성공 여부와 관계없이)
-        foreach (var pos in path)
+        // Clear the entire trail after processing
+        // Create a copy for iteration as SetState will modify the original list
+        List<Cell> trailToClear = new List<Cell>(activeTrail);
+        foreach (var cell in trailToClear)
         {
-            var cell = GetCellAt(pos);
-            if (cell != null && cell.currentState != CellState.PlayerCaptured)
-            {
-                cell.SetState(CellState.Neutral);
-            }
+            cell.SetState(CellState.Neutral);
         }
     }
 
-    /// <summary>
-    /// 주어진 루프 경로에 의해 둘러싸인 영역을 찾습니다. (Flood Fill / BFS 알고리즘 사용)
-    /// </summary>
     private List<Vector2Int> FindEnclosedArea(List<Vector2Int> loop)
     {
         HashSet<Vector2Int> loopSet = new HashSet<Vector2Int>(loop);
@@ -331,13 +305,8 @@ public class GameManager : MonoBehaviour
                 Vector2Int current = queue.Dequeue();
                 foreach (var neighbor in GetNeighbors(current))
                 {
-                    if (!IsCellExists(neighbor))
-                    {
-                        touchesBoundary = true;
-                        break;
-                    }
+                    if (!IsCellExists(neighbor)) { touchesBoundary = true; break; }
                     if (visited.Contains(neighbor) || loopSet.Contains(neighbor)) continue;
-
                     visited.Add(neighbor);
                     checkedStarts.Add(neighbor);
                     queue.Enqueue(neighbor);
@@ -353,19 +322,22 @@ public class GameManager : MonoBehaviour
         return null;
     }
 
-    /// <summary>
-    /// 특정 헥사 셀의 인접한 6개 셀의 좌표를 반환합니다. (Flat-Top, Odd-q)
-    /// </summary>
+    public Cell GetCellAt(Vector2Int pos)
+    {
+        cellGrid.TryGetValue(pos, out Cell cell);
+        return cell;
+    }
+
     private Vector2Int[] GetNeighbors(Vector2Int hex)
     {
-        if ((hex.x & 1) == 0) // Even columns
+        if ((hex.x & 1) == 0) // Even-q
         {
             return new[] {
                 new Vector2Int(hex.x, hex.y + 1), new Vector2Int(hex.x + 1, hex.y), new Vector2Int(hex.x + 1, hex.y - 1),
                 new Vector2Int(hex.x, hex.y - 1), new Vector2Int(hex.x - 1, hex.y - 1), new Vector2Int(hex.x - 1, hex.y)
             };
         }
-        else // Odd columns
+        else // Odd-q
         {
             return new[] {
                 new Vector2Int(hex.x, hex.y + 1), new Vector2Int(hex.x + 1, hex.y + 1), new Vector2Int(hex.x + 1, hex.y),
