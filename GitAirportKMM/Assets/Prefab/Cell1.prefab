@@ -101,8 +101,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 60a67efc30f4c45c8873a4028240fe6f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  isActive: 0
-  activeDuration: 2.2
+  currentState: 0
+  hexCoords: {x: 0, y: 0}
+  trailDuration: 3
 --- !u!60 &-1466389781766372948
 PolygonCollider2D:
   m_ObjectHideFlags: 0

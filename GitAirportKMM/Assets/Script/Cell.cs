@@ -14,7 +14,7 @@ public class Cell : MonoBehaviour
     public Vector2Int hexCoords;
 
     [Header("Settings")]
-    public float trailDuration = 5f; // 트레일 상태가 유지되는 시간
+    public float trailDuration = 3f; // 트레일 상태가 유지되는 시간
 
     private float trailTimer = 0f;
     private SpriteRenderer spriteRenderer;
