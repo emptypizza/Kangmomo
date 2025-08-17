@@ -5,7 +5,11 @@ using UnityEngine.UI;
 
 public class UIManager : MonoBehaviour
 {
- 
+    [Header("Opening Settings")]
+    public Image openingImage;
+    public float openingDisplayTime = 3f;
+    public float fadeOutDuration = 1.5f;
+
     public Text nLevel; // Modified to pcRotText
     public Text PlayerHP;
 
@@ -58,7 +62,10 @@ public class UIManager : MonoBehaviour
             clearImage.gameObject.SetActive(false);
         }
 
-       
+        if (openingImage != null)
+        {
+            StartCoroutine(OpeningSequenceCoroutine());
+        }
     }
     public void GameStart()
     {
@@ -84,8 +91,39 @@ public class UIManager : MonoBehaviour
 
     }
 
+    private IEnumerator OpeningSequenceCoroutine()
+    {
+        openingImage.gameObject.SetActive(true);
+        openingImage.color = new Color(1, 1, 1, 1); // Start fully opaque
+        Time.timeScale = 0f; // Pause the game
 
+        float timer = 0f;
+        bool isClicked = false;
 
+        // Wait for the duration to pass or for a user click
+        while (timer < openingDisplayTime && !isClicked)
+        {
+            if (Input.GetMouseButtonDown(0))
+            {
+                isClicked = true;
+            }
+            timer += Time.unscaledDeltaTime; // Use unscaled time
+            yield return null;
+        }
 
+        // Start the fade-out process
+        float fadeTimer = 0f;
+        while (fadeTimer < fadeOutDuration)
+        {
+            fadeTimer += Time.unscaledDeltaTime;
+            float alpha = 1f - (fadeTimer / fadeOutDuration);
+            openingImage.color = new Color(1, 1, 1, alpha);
+            yield return null;
+        }
+
+        // Cleanup
+        openingImage.gameObject.SetActive(false);
+        Time.timeScale = 1f; // Resume the game
+    }
 }
 
