@@ -1599,6 +1599,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 13624be2bba8c405aaef550ef23d4006, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  openingImage: {fileID: 194926604164423273}
+  openingDisplayTime: 3
+  fadeOutDuration: 1.5
   nLevel: {fileID: 0}
   PlayerHP: {fileID: 2826732297059808993}
   fDifficulty_lv: {fileID: 0}
@@ -2301,7 +2304,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &175856151372225725
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2402,7 +2405,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 194926604164423273}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 11500000, guid: 8da748c91407b4b3999c4a381365f61b, type: 3}
+        m_TargetAssemblyTypeName: 
+        m_MethodName: 
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: 
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &7616089165237403358
 GameObject:
   m_ObjectHideFlags: 0

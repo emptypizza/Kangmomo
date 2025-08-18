@@ -731,22 +731,6 @@ PrefabInstance:
       propertyPath: m_Name
       value: UICanvas_ingame
       objectReference: {fileID: 0}
-    - target: {fileID: 7568293727985987136, guid: cd1d6d00c10aa47dc9e2a38d3a55cc86, type: 3}
-      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.size
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 7568293727985987136, guid: cd1d6d00c10aa47dc9e2a38d3a55cc86, type: 3}
-      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Mode
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 7568293727985987136, guid: cd1d6d00c10aa47dc9e2a38d3a55cc86, type: 3}
-      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Target
-      value: 
-      objectReference: {fileID: 11500000, guid: 8da748c91407b4b3999c4a381365f61b, type: 3}
-    - target: {fileID: 7568293727985987136, guid: cd1d6d00c10aa47dc9e2a38d3a55cc86, type: 3}
-      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_CallState
-      value: 2
-      objectReference: {fileID: 0}
     - target: {fileID: 8468470262930875227, guid: cd1d6d00c10aa47dc9e2a38d3a55cc86, type: 3}
       propertyPath: m_Pivot.x
       value: 0
