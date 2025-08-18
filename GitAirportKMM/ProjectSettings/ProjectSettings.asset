@@ -988,11 +988,11 @@ PlayerSettings:
   captureStartupLogs: {}
   activeInputHandler: 2
   windowsGamepadBackendHint: 0
-  cloudProjectId: 38462a2b-f18a-4126-a4a9-187351899193
+  cloudProjectId: 2a4384e7-d94b-43b3-92bf-c293f01555e8
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
-  projectName: yytnight
-  organizationId: gghf
+  projectName: prjdeer0
+  organizationId: anatmanchoi_unity
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
   hmiLoadingImage: {fileID: 0}
