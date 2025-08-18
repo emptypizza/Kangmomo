@@ -1,113 +1,67 @@
-using System;
 using System.Reflection;
 using UnityEngine;
 
-/// <summary>
-/// Provides hex-grid conversions by delegating to an existing GameManager.
-/// </summary>
+/// Drop-in replacement:
+/// - 1순위: GameManager의 WorldToHex/HexToWorld(or WorldToAxial/AxialToWorld) 호출
+/// - 2순위: Player의 WorldToHex/HexToWorld 호출
+/// - 둘 다 없으면 1회 경고 후 안전한 기본값 반환(게임은 계속 진행)
+[DefaultExecutionOrder(-5000)]
 public class HexGridProvider_FromGameManager : MonoBehaviour, IHexGridProvider
 {
-    [Tooltip("Explicit reference to the GameManager. If left null, one will be searched at runtime.")]
-    public GameManager gm;
+    [Header("References (auto-bound if null)")]
+    [SerializeField] private GameManager gm;
+    [SerializeField] private Player player;
 
-    private MethodInfo _worldToHex;
-    private MethodInfo _hexToWorld;
-    private PropertyInfo _playerHexProperty;
-    private Transform _playerTransform;
+    MethodInfo gmWorldToHex, gmHexToWorld;
+    bool warned;
 
-    private bool _loggedWorldToHexMissing;
-    private bool _loggedHexToWorldMissing;
-    private bool _loggedPlayerMissing;
-
-    private void Awake()
+    void Awake()
     {
-        if (gm == null)
-            gm = FindObjectOfType<GameManager>();
+        // Auto-bind
+        if (!gm) gm = FindObjectOfType<GameManager>();
+        if (!player)
+        {
+            var pt = GameObject.FindGameObjectWithTag("Player");
+            if (pt) player = pt.GetComponent<Player>();
+            if (!player) player = FindObjectOfType<Player>();
+        }
 
-        CacheRefs();
+        CacheGmMethods();
     }
 
-    private void CacheRefs()
+    void CacheGmMethods()
     {
-        if (gm == null)
-            return;
-
-        var type = gm.GetType();
-        _worldToHex = type.GetMethod("WorldToHex") ?? type.GetMethod("WorldToAxial");
-        _hexToWorld = type.GetMethod("HexToWorld") ?? type.GetMethod("AxialToWorld");
-        _playerHexProperty = type.GetProperty("PlayerCurrentHex");
-
-        // Try to grab the player's transform for fallback calculations.
-        var playerField = type.GetField("player") as FieldInfo;
-        var playerProp = type.GetProperty("player");
-        object playerObj = playerField?.GetValue(gm) ?? playerProp?.GetValue(gm);
-        if (playerObj is Component comp)
-            _playerTransform = comp.transform;
+        if (gm == null) return;
+        var t = gm.GetType();
+        gmWorldToHex = t.GetMethod("WorldToHex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                      ?? t.GetMethod("WorldToAxial", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        gmHexToWorld = t.GetMethod("HexToWorld", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                      ?? t.GetMethod("AxialToWorld", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
     }
 
     public Vector2Int WorldToHex(Vector3 world)
     {
-        if (gm == null)
-        {
-            if (!_loggedWorldToHexMissing)
-            {
-                Debug.LogError("HexGridProvider_FromGameManager: GameManager not found.", this);
-                _loggedWorldToHexMissing = true;
-            }
-            return Vector2Int.zero;
-        }
+        // 1) GameManager 변환 우선
+        if (gm != null && gmWorldToHex != null)
+            return (Vector2Int)gmWorldToHex.Invoke(gm, new object[] { world });
 
-        if (_worldToHex != null)
-        {
-            try
-            {
-                object result = _worldToHex.Invoke(gm, new object[] { world });
-                if (result is Vector2Int v) return v;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"HexGridProvider_FromGameManager: WorldToHex invocation failed - {ex.Message}", this);
-            }
-        }
-        else if (!_loggedWorldToHexMissing)
-        {
-            Debug.LogError("HexGridProvider_FromGameManager: GameManager lacks WorldToHex/WorldToAxial method.", this);
-            _loggedWorldToHexMissing = true;
-        }
+        // 2) Player 변환으로 폴백 (당신의 Player에 이미 구현되어 있음)
+        if (player != null)
+            return player.WorldToHex(world);
 
+        WarnOnce("WorldToHex");
         return Vector2Int.zero;
     }
 
     public Vector3 HexToWorld(Vector2Int hex)
     {
-        if (gm == null)
-        {
-            if (!_loggedHexToWorldMissing)
-            {
-                Debug.LogError("HexGridProvider_FromGameManager: GameManager not found.", this);
-                _loggedHexToWorldMissing = true;
-            }
-            return Vector3.zero;
-        }
+        if (gm != null && gmHexToWorld != null)
+            return (Vector3)gmHexToWorld.Invoke(gm, new object[] { hex });
 
-        if (_hexToWorld != null)
-        {
-            try
-            {
-                object result = _hexToWorld.Invoke(gm, new object[] { hex });
-                if (result is Vector3 v) return v;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"HexGridProvider_FromGameManager: HexToWorld invocation failed - {ex.Message}", this);
-            }
-        }
-        else if (!_loggedHexToWorldMissing)
-        {
-            Debug.LogError("HexGridProvider_FromGameManager: GameManager lacks HexToWorld/AxialToWorld method.", this);
-            _loggedHexToWorldMissing = true;
-        }
+        if (player != null)
+            return player.HexToWorld(hex);
 
+        WarnOnce("HexToWorld");
         return Vector3.zero;
     }
 
@@ -115,33 +69,17 @@ public class HexGridProvider_FromGameManager : MonoBehaviour, IHexGridProvider
     {
         get
         {
-            if (gm == null)
-            {
-                if (!_loggedPlayerMissing)
-                {
-                    Debug.LogError("HexGridProvider_FromGameManager: GameManager not found.", this);
-                    _loggedPlayerMissing = true;
-                }
-                return Vector2Int.zero;
-            }
-
-            if (_playerHexProperty != null)
-            {
-                object val = _playerHexProperty.GetValue(gm, null);
-                if (val is Vector2Int v) return v;
-            }
-
-            if (_playerTransform != null)
-            {
-                return WorldToHex(_playerTransform.position);
-            }
-
-            if (!_loggedPlayerMissing)
-            {
-                Debug.LogError("HexGridProvider_FromGameManager: Unable to determine player hex.", this);
-                _loggedPlayerMissing = true;
-            }
+            if (player != null)
+                return WorldToHex(player.transform.position);
+            WarnOnce("PlayerCurrentHex");
             return Vector2Int.zero;
         }
+    }
+
+    void WarnOnce(string where)
+    {
+        if (warned) return;
+        warned = true;
+        Debug.LogWarning($"HexGridProvider_FromGameManager fallback used (no GM methods; no Player). Method: {where}", this);
     }
 }

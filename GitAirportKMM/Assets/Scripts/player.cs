@@ -152,12 +152,15 @@ public class Player : MonoBehaviour
     {
         if (other.CompareTag("Trash"))
         {
+            // 캡처(3칸 점령)용 Trash라면 여기서 아무 것도 하지 않음
+            if (other.TryGetComponent<TrashSecure>(out var _))
+                return;
+
+            // '즉시 줍는' 일반 Trash만 기존 처리
             GameManager.Instance.CollectItem();
             Destroy(other.gameObject);
             nHP += 1;
         }
-        // The logic for activating cells is now handled in MovePathCoroutine
-        // to have more control over the loop detection.
     }
 
     private IEnumerator InvincibilityCoroutine()

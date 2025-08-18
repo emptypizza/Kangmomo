@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 7214947828512073748}
   - component: {fileID: 2676844466637770916}
   - component: {fileID: 2498911713524488091}
+  - component: {fileID: -4217766922329268864}
   m_Layer: 0
   m_Name: Item
   m_TagString: Trash
@@ -105,7 +106,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   lifetime: 4.5
-  deltaHp: 5
+  deltaHp: 3
   deltaScore: 3
 --- !u!58 &2498911713524488091
 CircleCollider2D:
@@ -143,3 +144,22 @@ CircleCollider2D:
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
   m_Radius: 0.165
+--- !u!114 &-4217766922329268864
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8515589003397725105}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 14ebe49ecac314feb9ea212e1f5992d2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TrashSecure
+  requiredDirs: 0200000004000000
+  secureWindow: 3
+  captureFxDelay: 0.25
+  baseColor: {r: 1, g: 1, b: 1, a: 0}
+  progressColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  doneColor: {r: 0, g: 1, b: 0, a: 1}
+  gridProviderSource: {fileID: 0}
