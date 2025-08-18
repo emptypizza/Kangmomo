@@ -4,6 +4,7 @@
 // 3. Upon securing all cells in time they turn green, then disappear and the Trash is removed.
 // 4. If the timer expires, highlights reset back to yellow without disappearing.
 
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
