@@ -1,207 +1,202 @@
-using UnityEngine;
-using System.Collections;
-using System.Collections.Generic;
+// --- WHAT CHANGED ---
+// 1. No longer pre-highlights cells in Start(). Highlights are now created only when the player steps on a cell.
+// 2. Enforces exactly 3 required cells, auto-filling or trimming the inspector list as needed.
+// 3. Added logic in Start() to handle cases where the player begins on a required cell.
+// 4. On success/timeout, uses GridHighlighter.ClearMany() for cleaner highlight removal.
+// 5. Colors are now mapped as per the prompt: progressColor (Yellow on step), doneColor (Green on success).
 
-/// <summary>
-/// Core logic for the "Secure Trash" mechanic. Attach this to a Trash prefab.
-/// When a trash item spawns, it designates nearby hexes as "required". The player
-/// must step on all required hexes within a time window to capture the trash.
-/// </summary>
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+
 public class TrashSecure : MonoBehaviour
 {
-    // Helper enum for selecting hex directions in the Inspector.
-    public enum HexDir { E, NE, NW, W, SW, SE }
-
-    // Axial coordinate offsets for each hex direction, as per the prompt.
-    private static readonly Dictionary<HexDir, Vector2Int> hexDirectionOffsets = new Dictionary<HexDir, Vector2Int>
-    {
-        { HexDir.E,  new Vector2Int(1, 0) },
-        { HexDir.NE, new Vector2Int(1, -1) },
-        { HexDir.NW, new Vector2Int(0, -1) },
-        { HexDir.W,  new Vector2Int(-1, 0) },
-        { HexDir.SW, new Vector2Int(-1, 1) },
-        { HexDir.SE, new Vector2Int(0, 1) }
-    };
-
     [Header("Configuration")]
-    [Tooltip("Directions relative to this trash item that become required cells.")]
+    [Tooltip("The directions relative to this object that must be secured. Will be forced to exactly 3.")]
     public List<HexDir> requiredDirs = new List<HexDir> { HexDir.NW, HexDir.SW };
-
-    [Tooltip("Time in seconds the player has to step on all required cells after stepping on the first one.")]
+    [Tooltip("Time in seconds to secure all cells after the first one is entered.")]
     public float secureWindow = 3.0f;
-
-    [Tooltip("Delay in seconds before the trash object is destroyed after being captured.")]
+    [Tooltip("Delay after capture before the object is destroyed.")]
     public float captureFxDelay = 0.25f;
 
     [Header("Visuals")]
-    public Color baseColor = Color.yellow;
-    public Color progressColor = Color.blue;
+    [Tooltip("Color for cells that have not been visited yet (should be transparent).")]
+    public Color baseColor = new Color(1, 1, 1, 0); // Default to transparent
+    [Tooltip("Color for a cell the player has stepped on.")]
+    public Color progressColor = Color.yellow;
+    [Tooltip("Color for all cells upon successful capture.")]
     public Color doneColor = Color.green;
 
     [Header("Dependencies")]
     [SerializeField]
-    [Tooltip("A component that implements IHexGridProvider. This is required for the script to function.")]
     private MonoBehaviour gridProviderSource;
+    private IHexGridProvider _gridProvider;
 
-    // --- Private State ---
-    private IHexGridProvider gridProvider;
-    private Vector2Int itemHex;
-    private readonly List<Vector2Int> requiredHexes = new List<Vector2Int>();
-    private readonly HashSet<Vector2Int> visitedHexes = new HashSet<Vector2Int>();
+    // Internal State
+    private Vector2Int _itemHex;
+    private readonly List<Vector2Int> _requiredHexes = new List<Vector2Int>();
+    private readonly HashSet<Vector2Int> _visitedHexes = new HashSet<Vector2Int>();
+    private float _secureTimer = -1f;
+    private Vector2Int _lastPlayerHex;
 
-    private enum State { Idle, Countdown, Captured }
-    private State currentState = State.Idle;
-    private float countdownTimer = 0f;
-    private Vector2Int lastPlayerHex;
+    // --- Unity Lifecycle ---
 
-    private void Start()
+    void Start()
     {
-        // 1. Find and validate the Grid Provider
-        if (gridProviderSource != null && gridProviderSource is IHexGridProvider provider)
+        _gridProvider = gridProviderSource as IHexGridProvider;
+
+        if (_gridProvider == null)
         {
-            gridProvider = provider;
+            var providerComponent = FindObjectOfType<HexGridProvider_FromGameManager>();
+            if(providerComponent != null) _gridProvider = providerComponent;
         }
-        else
+
+        if (_gridProvider == null)
         {
-            Debug.LogError("TrashSecure requires a valid IHexGridProvider to be assigned in the 'Grid Provider Source' field. Disabling component.", this);
+            Debug.LogError("TrashSecure: IHexGridProvider is not assigned and could not be found!", this);
             enabled = false;
             return;
         }
 
-        // 2. Determine required hexes
-        itemHex = gridProvider.WorldToHex(transform.position);
-        foreach (var dir in requiredDirs)
-        {
-            if (hexDirectionOffsets.TryGetValue(dir, out var offset))
-            {
-                requiredHexes.Add(itemHex + offset);
-            }
-        }
+        InitializeRequiredHexes();
 
-        if (requiredHexes.Count == 0)
-        {
-            Debug.LogWarning("TrashSecure: No valid required directions set. The trash will be un-securable.", this);
-            enabled = false;
-            return;
-        }
+        _lastPlayerHex = _gridProvider.PlayerCurrentHex;
 
-        // 3. Set initial state and visuals
-        ResetStateVisuals(baseColor);
-        lastPlayerHex = gridProvider.PlayerCurrentHex;
+        // Edge Case: Check if player starts on a required hex.
+        if (_requiredHexes.Contains(_lastPlayerHex))
+        {
+            OnPlayerEnterRequiredHex(_lastPlayerHex);
+        }
     }
 
-    private void Update()
+    void Update()
     {
-        if (currentState == State.Captured || !enabled) return;
+        if (_gridProvider == null) return;
 
-        // Handle countdown timer
-        if (currentState == State.Countdown)
+        HandlePlayerMovement();
+        HandleSecureTimer();
+    }
+
+    void OnDestroy()
+    {
+        if (GridHighlighter.Instance != null && _requiredHexes.Count > 0)
         {
-            countdownTimer -= Time.deltaTime;
-            if (countdownTimer <= 0f)
+            GridHighlighter.Instance.ClearMany(_requiredHexes);
+        }
+    }
+
+    // --- Core Logic ---
+
+    private void InitializeRequiredHexes()
+    {
+        _itemHex = _gridProvider.WorldToHex(transform.position);
+
+        var finalDirs = new HashSet<HexDir>(requiredDirs);
+        var allDirs = System.Enum.GetValues(typeof(HexDir)).Cast<HexDir>().ToList();
+
+        while(finalDirs.Count < 3 && allDirs.Count > 0)
+        {
+            int randIndex = Random.Range(0, allDirs.Count);
+            if (!finalDirs.Contains(allDirs[randIndex]))
             {
-                ResetToIdle();
+                finalDirs.Add(allDirs[randIndex]);
             }
+            allDirs.RemoveAt(randIndex);
         }
 
-        // Check for player movement onto a required hex
-        Vector2Int playerHex = gridProvider.PlayerCurrentHex;
-        if (playerHex != lastPlayerHex)
+        _requiredHexes.Clear();
+        foreach (var dir in finalDirs.Take(3))
         {
-            lastPlayerHex = playerHex;
-            if (requiredHexes.Contains(playerHex) && !visitedHexes.Contains(playerHex))
+            _requiredHexes.Add(_itemHex + GetHexOffset(dir));
+        }
+    }
+
+    private void HandlePlayerMovement()
+    {
+        Vector2Int currentPlayerHex = _gridProvider.PlayerCurrentHex;
+        if (currentPlayerHex != _lastPlayerHex)
+        {
+            if (_requiredHexes.Contains(currentPlayerHex))
             {
-                OnPlayerEnterRequiredHex(playerHex);
+                OnPlayerEnterRequiredHex(currentPlayerHex);
             }
+            _lastPlayerHex = currentPlayerHex;
         }
     }
 
     private void OnPlayerEnterRequiredHex(Vector2Int hex)
     {
-        visitedHexes.Add(hex);
-        GridHighlighter.Instance?.SetColor(hex, progressColor);
+        if (_visitedHexes.Contains(hex)) return;
 
-        // Start countdown on first interaction
-        if (currentState == State.Idle)
+        _visitedHexes.Add(hex);
+        GridHighlighter.Instance.SetColor(hex, progressColor);
+
+        if (_visitedHexes.Count == 1)
         {
-            currentState = State.Countdown;
-            countdownTimer = secureWindow;
+            _secureTimer = secureWindow;
         }
 
-        // Check for completion
-        if (visitedHexes.Count == requiredHexes.Count)
+        if (_visitedHexes.Count >= _requiredHexes.Count)
         {
-            StartCoroutine(CaptureRoutine());
-        }
-    }
-
-    private void ResetToIdle()
-    {
-        currentState = State.Idle;
-        visitedHexes.Clear();
-        countdownTimer = 0f;
-        ResetStateVisuals(baseColor);
-    }
-
-    private void ResetStateVisuals(Color color)
-    {
-        if (GridHighlighter.Instance == null) return;
-        foreach (var hex in requiredHexes)
-        {
-            GridHighlighter.Instance.SetColor(hex, color);
+            OnCaptureSuccess();
         }
     }
 
-    private IEnumerator CaptureRoutine()
+    private void HandleSecureTimer()
     {
-        currentState = State.Captured;
+        if (_secureTimer > 0)
+        {
+            _secureTimer -= Time.deltaTime;
+            if (_secureTimer <= 0)
+            {
+                OnCaptureTimeout();
+            }
+        }
+    }
 
-        ResetStateVisuals(doneColor);
+    private void OnCaptureSuccess()
+    {
+        _secureTimer = -1f;
+        enabled = false;
+
+        foreach (var hex in _requiredHexes)
+        {
+            GridHighlighter.Instance.SetColor(hex, doneColor);
+        }
+
         GameEvents.RaiseTrashCaptured(transform.position);
+        Invoke(nameof(CleanupAfterCapture), captureFxDelay);
+    }
 
-        yield return new WaitForSeconds(captureFxDelay);
+    private void OnCaptureTimeout()
+    {
+        _secureTimer = -1f;
+        GridHighlighter.Instance.ClearMany(_visitedHexes);
+        _visitedHexes.Clear();
+    }
 
-        // The object will be destroyed, triggering OnDestroy for cleanup.
+    private void CleanupAfterCapture()
+    {
+        if (GridHighlighter.Instance != null)
+        {
+            GridHighlighter.Instance.ClearMany(_requiredHexes);
+        }
         Destroy(gameObject);
     }
 
-    private void OnDestroy()
+    private Vector2Int GetHexOffset(HexDir dir)
     {
-        // Ensure highlights are cleared when this object is destroyed for any reason.
-        if (GridHighlighter.Instance != null && requiredHexes.Count > 0)
+        switch (dir)
         {
-            foreach (var hex in requiredHexes)
-            {
-                GridHighlighter.Instance.Clear(hex);
-            }
+            case HexDir.E: return new Vector2Int(1, 0);
+            case HexDir.NE: return new Vector2Int(1, -1);
+            case HexDir.NW: return new Vector2Int(0, -1);
+            case HexDir.W: return new Vector2Int(-1, 0);
+            case HexDir.SW: return new Vector2Int(-1, 1);
+            case HexDir.SE: return new Vector2Int(0, 1);
+            default: return Vector2Int.zero;
         }
     }
-
-    #if UNITY_EDITOR
-    private void OnDrawGizmosSelected()
-    {
-        // This code only runs in the Unity Editor
-        if (gridProviderSource == null || !(gridProviderSource is IHexGridProvider))
-        {
-            // Try to find one in the component itself for edit-time feedback
-            if (GetComponent<IHexGridProvider>() != null)
-                 gridProviderSource = GetComponent<MonoBehaviour>();
-            else
-                return; // Can't draw gizmos without a provider
-        }
-
-        IHexGridProvider gizmoProvider = (IHexGridProvider)gridProviderSource;
-        Vector2Int currentItemHex = gizmoProvider.WorldToHex(transform.position);
-
-        Gizmos.color = baseColor;
-        foreach (var dir in requiredDirs)
-        {
-            if (hexDirectionOffsets.TryGetValue(dir, out var offset))
-            {
-                Vector3 worldPos = gizmoProvider.HexToWorld(currentItemHex + offset);
-                Gizmos.DrawWireSphere(worldPos, 0.5f); // Use WireSphere for better visibility over solid objects
-            }
-        }
-    }
-    #endif
 }
+
+public enum HexDir { E, NE, NW, W, SW, SE }

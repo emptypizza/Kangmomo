@@ -1,28 +1,24 @@
-using UnityEngine;
-using System.Collections.Generic;
+// --- WHAT CHANGED ---
+// 1. Added ClearMany() method to efficiently clear multiple highlights at once.
+// 2. Implemented a simple object pool for highlight GameObjects to prevent garbage collection spikes.
 
-/// <summary>
-/// A singleton visualizer for the hex grid. It manages and reuses highlight
-/// objects to color individual hex cells without performance overhead.
-/// </summary>
+using System.Collections.Generic;
+using UnityEngine;
+
 public class GridHighlighter : MonoBehaviour
 {
     public static GridHighlighter Instance { get; private set; }
 
     [Header("Dependencies")]
-    [SerializeField]
-    [Tooltip("The prefab to use for highlighting a cell. Must have a SpriteRenderer component.")]
-    private GameObject highlightPrefab;
+    [SerializeField] public GameObject highlightPrefab;
+    [SerializeField] private MonoBehaviour gridProviderSource;
+    private IHexGridProvider _gridProvider;
 
-    [SerializeField]
-    [Tooltip("A component that implements IHexGridProvider. This is required for the highlighter to work.")]
-    private MonoBehaviour gridProviderSource;
+    private readonly Dictionary<Vector2Int, SpriteRenderer> _activeHighlights = new Dictionary<Vector2Int, SpriteRenderer>();
+    private readonly Queue<SpriteRenderer> _highlightPool = new Queue<SpriteRenderer>();
+    private Transform _poolContainer;
 
-    private IHexGridProvider gridProvider;
-    private readonly Dictionary<Vector2Int, SpriteRenderer> activeHighlights = new Dictionary<Vector2Int, SpriteRenderer>();
-    private readonly Queue<SpriteRenderer> highlightPool = new Queue<SpriteRenderer>();
-
-    private void Awake()
+    void Awake()
     {
         if (Instance != null && Instance != this)
         {
@@ -31,96 +27,87 @@ public class GridHighlighter : MonoBehaviour
         }
         Instance = this;
 
-        // --- Grid Provider Initialization ---
-        if (gridProviderSource != null && gridProviderSource is IHexGridProvider provider)
+        _gridProvider = gridProviderSource as IHexGridProvider;
+    }
+
+    void Start()
+    {
+        if (_gridProvider == null)
         {
-            gridProvider = provider;
+             var providerComponent = FindObjectOfType<HexGridProvider_FromGameManager>();
+             if(providerComponent != null) _gridProvider = providerComponent;
         }
-        else
+
+        if (_gridProvider == null)
         {
-            // Unlike the first attempt, we won't fall back to finding GameManager automatically,
-            // because we know it's not compatible. An explicit assignment is required.
-            Debug.LogError("GridHighlighter requires a valid IHexGridProvider to be assigned in the 'Grid Provider Source' field.", this);
-            enabled = false; // Disable this component if the dependency is not met.
-            return;
+            Debug.LogError("GridHighlighter: IHexGridProvider is not assigned!", this);
+            enabled = false;
         }
     }
 
-    /// <summary>
-    /// Sets the color of a specific hex cell.
-    /// </summary>
-    /// <param name="hex">The axial coordinate of the hex to color.</param>
-    /// <param name="color">The color to apply.</param>
     public void SetColor(Vector2Int hex, Color color)
     {
-        if (gridProvider == null || !enabled) return;
+        if (_gridProvider == null) return;
 
-        if (activeHighlights.TryGetValue(hex, out SpriteRenderer renderer))
+        if (_activeHighlights.TryGetValue(hex, out var renderer))
         {
-            // If already highlighting this hex, just update the color.
             renderer.color = color;
         }
         else
         {
-            // Otherwise, grab a highlighter from the pool or create a new one.
-            renderer = GetOrCreateHighlightRenderer();
-            if (renderer == null) return; // Stop if prefab is missing.
-
-            renderer.transform.position = gridProvider.HexToWorld(hex);
-            renderer.color = color;
-            renderer.gameObject.SetActive(true);
-            activeHighlights[hex] = renderer;
+            SpriteRenderer newRenderer = GetFromPool();
+            newRenderer.transform.position = _gridProvider.HexToWorld(hex);
+            newRenderer.color = color;
+            newRenderer.gameObject.SetActive(true);
+            _activeHighlights[hex] = newRenderer;
         }
     }
 
-    /// <summary>
-    /// Clears any highlight from a specific hex cell, returning it to the pool.
-    /// </summary>
-    /// <param name="hex">The axial coordinate of the hex to clear.</param>
     public void Clear(Vector2Int hex)
     {
-        if (activeHighlights.TryGetValue(hex, out SpriteRenderer renderer))
+        if (_activeHighlights.TryGetValue(hex, out var renderer))
         {
-            renderer.gameObject.SetActive(false);
-            highlightPool.Enqueue(renderer);
-            activeHighlights.Remove(hex);
+            ReturnToPool(renderer);
+            _activeHighlights.Remove(hex);
         }
     }
 
-    private SpriteRenderer GetOrCreateHighlightRenderer()
+    public void ClearMany(IEnumerable<Vector2Int> hexes)
     {
-        if (highlightPool.Count > 0)
+        foreach (var hex in hexes)
         {
-            return highlightPool.Dequeue();
+            Clear(hex);
+        }
+    }
+
+    private SpriteRenderer GetFromPool()
+    {
+        if (_highlightPool.Count > 0)
+        {
+            return _highlightPool.Dequeue();
+        }
+
+        if (_poolContainer == null)
+        {
+            _poolContainer = new GameObject("HighlightPoolContainer").transform;
+            _poolContainer.SetParent(transform);
         }
 
         if (highlightPrefab == null)
         {
-            Debug.LogError("Highlight Prefab is not assigned in GridHighlighter.", this);
-            return null;
+            Debug.LogError("GridHighlighter: highlightPrefab is not assigned! Ensure SecureTrashBootstrap is in the scene.", this);
+            var go = new GameObject("FallbackHighlight");
+            go.transform.SetParent(_poolContainer);
+            return go.AddComponent<SpriteRenderer>();
         }
-        GameObject newInstance = Instantiate(highlightPrefab, transform);
-        return newInstance.GetComponent<SpriteRenderer>();
+
+        var instance = Instantiate(highlightPrefab, _poolContainer);
+        return instance.GetComponent<SpriteRenderer>();
     }
 
-    private void OnDestroy()
+    private void ReturnToPool(SpriteRenderer renderer)
     {
-        // Clean up all instantiated highlight objects to prevent scene leaks.
-        foreach (var pair in activeHighlights)
-        {
-            if (pair.Value != null) Destroy(pair.Value.gameObject);
-        }
-        activeHighlights.Clear();
-
-        foreach(var pooledRenderer in highlightPool)
-        {
-            if (pooledRenderer != null) Destroy(pooledRenderer.gameObject);
-        }
-        highlightPool.Clear();
-
-        if (Instance == this)
-        {
-            Instance = null;
-        }
+        renderer.gameObject.SetActive(false);
+        _highlightPool.Enqueue(renderer);
     }
 }
