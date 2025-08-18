@@ -1,10 +1,10 @@
 // --- WHAT CHANGED ---
-// 1. No longer pre-highlights cells in Start(). Highlights are now created only when the player steps on a cell.
-// 2. Enforces exactly 3 required cells, auto-filling or trimming the inspector list as needed.
-// 3. Added logic in Start() to handle cases where the player begins on a required cell.
-// 4. On success/timeout, uses GridHighlighter.ClearMany() for cleaner highlight removal.
-// 5. Colors are now mapped as per the prompt: progressColor (Yellow on step), doneColor (Green on success).
+// 1. Pre-highlights exactly three required hexes in yellow when the Trash spawns.
+// 2. Highlights turn blue as the player steps on them and start the secure timer.
+// 3. Upon securing all cells in time they turn green, then disappear and the Trash is removed.
+// 4. If the timer expires, highlights reset back to yellow without disappearing.
 
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -20,12 +20,12 @@ public class TrashSecure : MonoBehaviour
     public float captureFxDelay = 0.25f;
 
     [Header("Visuals")]
-    [Tooltip("Color for cells that have not been visited yet (should be transparent).")]
-    public Color baseColor = new Color(1, 1, 1, 0); // Default to transparent
-    [Tooltip("Color for a cell the player has stepped on.")]
-    public Color progressColor = Color.yellow;
-    [Tooltip("Color for all cells upon successful capture.")]
-    public Color doneColor = Color.green;
+    [Tooltip("Color for cells that have not been visited yet (yellow).")]
+    public Color baseColor = new Color(1f, 0.84f, 0f, 1f); // #FFD700
+    [Tooltip("Color for a cell the player has stepped on (blue).")]
+    public Color progressColor = new Color(0.23f, 0.37f, 0.92f, 1f); // ~#3A5EEA
+    [Tooltip("Color for all cells upon successful capture (green).")]
+    public Color doneColor = new Color(0.13f, 0.8f, 0.27f, 1f); // #22CC44
 
     [Header("Dependencies")]
     [SerializeField]
@@ -109,6 +109,11 @@ public class TrashSecure : MonoBehaviour
         {
             _requiredHexes.Add(_itemHex + GetHexOffset(dir));
         }
+
+        foreach (var h in _requiredHexes)
+        {
+            GridHighlighter.Instance.SetColor(h, baseColor);
+        }
     }
 
     private void HandlePlayerMovement()
@@ -131,7 +136,7 @@ public class TrashSecure : MonoBehaviour
         _visitedHexes.Add(hex);
         GridHighlighter.Instance.SetColor(hex, progressColor);
 
-        if (_visitedHexes.Count == 1)
+        if (_secureTimer < 0f)
         {
             _secureTimer = secureWindow;
         }
@@ -156,32 +161,33 @@ public class TrashSecure : MonoBehaviour
 
     private void OnCaptureSuccess()
     {
+        StartCoroutine(CaptureSuccessRoutine());
+    }
+
+    private IEnumerator CaptureSuccessRoutine()
+    {
         _secureTimer = -1f;
         enabled = false;
 
-        foreach (var hex in _requiredHexes)
+        foreach (var h in _requiredHexes)
         {
-            GridHighlighter.Instance.SetColor(hex, doneColor);
+            GridHighlighter.Instance.SetColor(h, doneColor);
         }
 
+        yield return new WaitForSeconds(captureFxDelay);
+        GridHighlighter.Instance.ClearMany(_requiredHexes);
         GameEvents.RaiseTrashCaptured(transform.position);
-        Invoke(nameof(CleanupAfterCapture), captureFxDelay);
+        Destroy(gameObject);
     }
 
     private void OnCaptureTimeout()
     {
         _secureTimer = -1f;
-        GridHighlighter.Instance.ClearMany(_visitedHexes);
         _visitedHexes.Clear();
-    }
-
-    private void CleanupAfterCapture()
-    {
-        if (GridHighlighter.Instance != null)
+        foreach (var h in _requiredHexes)
         {
-            GridHighlighter.Instance.ClearMany(_requiredHexes);
+            GridHighlighter.Instance.SetColor(h, baseColor);
         }
-        Destroy(gameObject);
     }
 
     private Vector2Int GetHexOffset(HexDir dir)
